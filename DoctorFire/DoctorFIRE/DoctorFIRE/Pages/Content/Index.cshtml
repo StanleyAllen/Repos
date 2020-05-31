@@ -1,0 +1,200 @@
+﻿@page
+@using DoctorFIRE.Models
+@model DoctorFIRE.Pages.Content.IndexModel
+
+@{
+	ViewData["Title"] = "Index";
+}
+
+<h1>Content Predictor</h1>
+
+<div class="row">
+	<div class="col-md-5">
+		<label for="context">Context</label>
+		<select class="form-control" id="context" asp-items="Model.Contexts"></select>
+	</div>
+	<div class="col-md-6 offset-1">
+		<button class="btn btn-success" id="newcase">Start New Case</button>
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-6">
+		<label>Available Contents</label>
+		<div id="contentList" class="overflow-auto border" style="height: 300px;"></div>
+	</div>
+	<div class="col-md-6">
+		<label for="selectedContents">Selected</label>
+		<textarea class="form-control" id="selectedContents" style="height:300px"></textarea><br/>
+		<button id="copyButton" class="btn-success btn-sm btn">Copy</button>
+	</div>
+</div>
+
+<div class="row">
+	<div class="col-md-12">
+		<label for="contentText">Content Text:</label>
+		<input class="form-control" type="text" id="contentText" />
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-6">
+		<label for="soap">SOAP:</label>
+		<select class="form-control" name="soap" id="soap" asp-items="Model.Soap"></select>
+	</div>
+	<div class="col-md-6">
+		<label for="reference">Reference</label>
+		<input class="form-control" type="text" id="reference"/>
+	</div>
+</div>
+<div class="row">
+	<div class="col-md-4">
+		<button class="btn btn-primary" id="saveContent">Save Content</button>
+	</div>
+</div>
+
+
+<input id="caseId" type="hidden" />
+@section Scripts {
+	<script>
+		$("#saveContent").on("click",
+			function() {
+				var data = {
+					"text": $("#contentText").val(),
+					"soap": $("#soap").val(),
+					"contextId": $("#context").val(),
+					"reference": $("#reference").val()
+				};
+				$.ajax({
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					type: "POST",
+					url: "/doctorfire/api/savecontent",
+					data: JSON.stringify(data),
+					success: function() {
+						loadContents();
+					}
+				});
+			});
+
+		$("#context").on("change",
+			function() {
+				loadContents();
+			});
+
+		$("#newcase").on("click",
+			function() {
+				$.ajax({
+					type: "get",
+					url: "/doctorfire/api/getnewcase",
+					success: function(result) {
+						$("#caseId").val(result.caseId);
+						loadContents();
+						$("#selectedContents").val("");
+					}
+				});
+			});
+
+		function loadContents() {
+			$.ajax({
+				type: "get",
+				url: "/doctorfire/api/contentsbycontextid?contextId=" + $("#context").val(),
+				success: function(result) {
+					$("#contentList").empty();
+					$.each(result,
+						function(i, obj) {
+							var entry = $("<p></p>");
+							entry.text(obj.text);
+							entry.attr("data-contentId", obj.value);
+							entry.attr("ondblclick", "selectContent('" + obj.value + "');");
+							$("#contentList").append(entry);
+						});
+				}
+			});
+		}
+
+		function selectContent(id) {
+			if ($("#caseId").val() === '') {
+				alert("Please create a new case.");
+				return;
+			}
+			var caseId = "caseId=" + $("#caseId").val();
+			var contentId = "&contentId=" + id;
+			var contextId = "&contextId=" + $("#context").val();
+			url = "/doctorfire/api/selectContent?" + caseId + contentId + contextId;
+			$.ajax({
+				type: "get",
+				url: url,
+				success: function(result) {
+					var selectedText = result.text;
+					var sc = $("#selectedContents").val();
+					$("#selectedContents").val(sc + selectedText + "  ");
+					$.each($("p"),
+						function(i) {
+							if ($(this).text() == selectedText)
+								$(this).remove();
+						});
+				}
+			});
+		}
+
+		document.getElementById("copyButton").addEventListener("click", function() {
+			copyToClipboard(document.getElementById("selectedContents"));
+		});
+
+		function copyToClipboard(elem) {
+			// create hidden text element, if it doesn't already exist
+			var targetId = "_hiddenCopyText_";
+			var isInput = elem.tagName === "INPUT" || elem.tagName === "TEXTAREA";
+			var origSelectionStart, origSelectionEnd;
+			if (isInput) {
+				// can just use the original source element for the selection and copy
+				target = elem;
+				origSelectionStart = elem.selectionStart;
+				origSelectionEnd = elem.selectionEnd;
+			} else {
+				// must use a temporary form element for the selection and copy
+				target = document.getElementById(targetId);
+				if (!target) {
+					var target = document.createElement("textarea");
+					target.style.position = "absolute";
+					target.style.left = "-9999px";
+					target.style.top = "0";
+					target.id = targetId;
+					document.body.appendChild(target);
+				}
+				target.textContent = elem.textContent;
+			}
+			// select the content
+			var currentFocus = document.activeElement;
+			target.focus();
+			target.setSelectionRange(0, target.value.length);
+    
+			// copy the selection
+			var succeed;
+			try {
+				succeed = document.execCommand("copy");
+			} catch(e) {
+				succeed = false;
+			}
+			// restore original focus
+			if (currentFocus && typeof currentFocus.focus === "function") {
+				currentFocus.focus();
+			}
+    
+			if (isInput) {
+				// restore prior selection
+				elem.setSelectionRange(origSelectionStart, origSelectionEnd);
+			} else {
+				// clear temporary content
+				target.textContent = "";
+			}
+			return succeed;
+		}
+
+		$(document).ready(function() {
+			loadContents();
+		});
+	</script>
+
+
+}
